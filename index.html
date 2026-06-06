@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線上科學閱讀理解動態評量系統 DARCS</title>
+    <!-- 引入 Tailwind CSS (版面設計) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 React 與 ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- 引入 Babel (用來在瀏覽器中編譯 JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // --- SVG 圖示元件 (取代原本的 lucide-react) ---
+        const Icon = ({ children, className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+                {children}
+            </svg>
+        );
+        const Microscope = ({className}) => <Icon className={className}><path d="M6 18h8"/><path d="M3 22h18"/><path d="M14 22a7 7 0 1 0 0-14h-1"/><path d="M9 14h2"/><path d="M9 12a2 2 0 0 1-2-2V6h6v4a2 2 0 0 1-2 2Z"/><path d="M12 6V3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3"/></Icon>;
+        const Calculator = ({className}) => <Icon className={className}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></Icon>;
+        const Languages = ({className}) => <Icon className={className}><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></Icon>;
+        const BookOpen = ({className}) => <Icon className={className}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></Icon>;
+        const BrainCircuit = ({className}) => <Icon className={className}><path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z"/><path d="M9 13a4.5 4.5 0 0 0 3-4"/><path d="M6.003 5.125A3 3 0 0 0 6.401 6.5"/><path d="M3.477 10.896a4 4 0 0 1 .585-.396"/><path d="M6 18a4 4 0 0 1-1.968-.516"/><path d="M12 13h4"/><path d="M12 18h6a2 2 0 0 1 2 2v1"/><path d="M12 8h8"/><path d="M16 8V5a2 2 0 0 1 2-2"/><circle cx="16" cy="13" r=".5"/><circle cx="18" cy="3" r=".5"/><circle cx="20" cy="21" r=".5"/><circle cx="20" cy="8" r=".5"/></Icon>;
+        const Lightbulb = ({className}) => <Icon className={className}><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1.3.5 2.6 1.5 3.5.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></Icon>;
+        const Activity = ({className}) => <Icon className={className}><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></Icon>;
+        const ArrowRight = ({className}) => <Icon className={className}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></Icon>;
+        const ArrowDown = ({className}) => <Icon className={className}><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></Icon>;
+        const CheckCircle2 = ({className}) => <Icon className={className}><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></Icon>;
+        const LineChart = ({className}) => <Icon className={className}><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></Icon>;
+        const RotateCcw = ({className}) => <Icon className={className}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></Icon>;
+
+        // --- 主程式開始 ---
+        function App() {
+            const [activeCase, setActiveCase] = useState(0);
+
+            const cases = [
+                {
+                    title: '科學閱讀理解',
+                    icon: <Microscope className="w-6 h-6" />,
+                    theme: '為什麼植物需要陽光？',
+                    question: '根據文章內容，植物缺少陽光時，可能會出現什麼情形？',
+                    prompts: [
+                        { level: '第一層：重述題意', text: '題目問的是植物缺少陽光後會發生什麼變化，請你再想想文章在問哪一件事。', analysis: '若此時答對，表示可能只是看題不清。' },
+                        { level: '第二層：回到文本', text: '請回到第二段，找找看文章提到陽光和植物製造養分的關係。', analysis: '若此時答對，代表尚未掌握回到文本找線索的策略。' },
+                        { level: '第三層：明示概念', text: '植物需要陽光進行光合作用，若缺少陽光，製造養分的能力會下降，因此可能生長不良。', analysis: '若此時才答對，表示對光合作用概念仍不清楚。' },
+                    ]
+                },
+                {
+                    title: '數學應用題',
+                    icon: <Calculator className="w-6 h-6" />,
+                    theme: '面積與周長計算',
+                    question: '一個長方形面積是16平方公尺，長是5公尺，請問周長是多少？',
+                    prompts: [
+                        { level: '第一層：重述題意', text: '題目已經給你面積和長，要求的是周長。', analysis: '若此時答對，表示可能卡在題意理解。' },
+                        { level: '第二層：提示步驟', text: '要求周長前，要先知道長和寬。你可以先想：面積 ÷ 長 = 什麼？', analysis: '若此時答對，代表不知道或忘記解題步驟。' },
+                        { level: '第三層：明示概念', text: '長方形面積＝長×寬，所以寬＝面積÷長；求出寬後，再用（長＋寬）×2 求周長。', analysis: '若此時才答對，表示面積與周長公式混淆。' },
+                    ]
+                },
+                {
+                    title: '國語閱讀理解',
+                    icon: <Languages className="w-6 h-6" />,
+                    theme: '描寫父親辛勤工作的文章',
+                    question: '作者最想表達的主旨是什麼？',
+                    prompts: [
+                        { level: '第一層：重述題意', text: '題目問的是整篇文章最主要想表達的意思。', analysis: '若此時答對，表示未掌握「主旨」的詞義。' },
+                        { level: '第二層：閱讀策略', text: '請看看文章最後一段，通常作者會在結尾寫出感受或想法。', analysis: '若此時答對，表示未養成從關鍵段落找主旨的閱讀策略。' },
+                        { level: '第三層：明示概念', text: '這篇文章透過父親工作的描寫，表達對父親辛勞與付出的感謝。', analysis: '若此時才答對，表示文章統整與歸納能力仍需補強。' },
+                    ]
+                }
+            ];
+
+            // 鍵盤左右鍵切換功能
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+                    if (e.key === 'ArrowRight') {
+                        setActiveCase((prev) => (prev + 1) % cases.length);
+                    } else if (e.key === 'ArrowLeft') {
+                        setActiveCase((prev) => (prev - 1 + cases.length) % cases.length);
+                    }
+                };
+
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [cases.length]);
+
+            return (
+                <div className="min-h-screen font-sans text-slate-800">
+                    {/* 頁首 */}
+                    <header className="bg-gradient-to-br from-blue-700 to-indigo-800 text-white py-20 px-6">
+                        <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+                            <div>
+                                <div className="inline-block px-3 py-1 bg-blue-500/30 rounded-full text-sm font-medium tracking-wider mb-4 border border-blue-400/30">
+                                    課程評量創新模式
+                                </div>
+                                <h1 className="text-4xl md:text-5xl font-bold leading-tight mb-6">
+                                    線上科學閱讀理解<br/>動態評量系統 DARCS
+                                </h1>
+                                <p className="text-lg text-blue-100 mb-8 leading-relaxed">
+                                    從「評量學習結果」走向「促進學習」。透過「測驗—提示—再作答—診斷回饋」歷程，了解學生不只是「會不會」，更能看見學生在協助後的學習潛能。
+                                </p>
+                                <div className="flex gap-4">
+                                    <a href="#flowchart" className="px-6 py-3 bg-white text-blue-700 font-semibold rounded-lg shadow-lg hover:bg-blue-50 transition-colors">
+                                        探索系統流程
+                                    </a>
+                                    <a href="#cases" className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg border border-blue-500 hover:bg-blue-500 transition-colors">
+                                        查看實際案例
+                                    </a>
+                                </div>
+                            </div>
+                            <div className="relative rounded-2xl overflow-hidden shadow-2xl">
+                                <img 
+                                    src="https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=800&q=80" 
+                                    alt="學生透過數位載具學習" 
+                                    className="w-full h-auto object-cover opacity-90 hover:opacity-100 transition-opacity"
+                                />
+                                <div className="absolute inset-0 bg-gradient-to-t from-indigo-900/80 to-transparent flex flex-col justify-end p-6">
+                                    <p className="text-white font-medium">✨ 結合數位科技與動態評量理念</p>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* 核心概念對比 */}
+                    <section className="py-16 px-6 max-w-5xl mx-auto">
+                        <div className="text-center mb-12">
+                            <h2 className="text-3xl font-bold text-slate-800 mb-4">為什麼需要動態評量？</h2>
+                            <p className="text-slate-600 max-w-2xl mx-auto">引用 Feuerstein 與 Vygotsky 近側發展區(ZPD)概念，強調評量是一種「協助式評量」。</p>
+                        </div>
+                        
+                        <div className="grid md:grid-cols-2 gap-8">
+                            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-slate-100 rounded-bl-full -z-10"></div>
+                                <div className="w-12 h-12 bg-slate-100 text-slate-500 rounded-xl flex items-center justify-center mb-6">
+                                    <BookOpen className="w-6 h-6" />
+                                </div>
+                                <h3 className="text-xl font-bold mb-4">傳統靜態評量</h3>
+                                <ul className="space-y-3 text-slate-600">
+                                    <li className="flex gap-2 items-start"><span className="text-slate-400 mt-1">✕</span> 只看一次作答的「結果」</li>
+                                    <li className="flex gap-2 items-start"><span className="text-slate-400 mt-1">✕</span> 知道答對/答錯，難以看出錯在哪</li>
+                                    <li className="flex gap-2 items-start"><span className="text-slate-400 mt-1">✕</span> 無法掌握學生的學習潛能</li>
+                                </ul>
+                            </div>
+
+                            <div className="bg-blue-50 p-8 rounded-2xl shadow-sm border border-blue-100 relative overflow-hidden ring-1 ring-blue-500/20">
+                                <div className="absolute top-0 right-0 w-24 h-24 bg-blue-100 rounded-bl-full -z-10"></div>
+                                <div className="w-12 h-12 bg-blue-600 text-white rounded-xl flex items-center justify-center mb-6 shadow-md shadow-blue-500/30">
+                                    <BrainCircuit className="w-6 h-6" />
+                                </div>
+                                <h3 className="text-xl font-bold mb-4 text-blue-900">動態評量 (Dynamic Assessment)</h3>
+                                <ul className="space-y-3 text-slate-700">
+                                    <li className="flex gap-2 items-start"><span className="text-blue-500 mt-1">✓</span> 觀察學生在協助下的「歷程與進步」</li>
+                                    <li className="flex gap-2 items-start"><span className="text-blue-500 mt-1">✓</span> 提供適當提示，精準診斷學習困難</li>
+                                    <li className="flex gap-2 items-start"><span className="text-blue-500 mt-1">✓</span> 看見學生的近側發展區(ZPD)與潛能</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 流程圖 (Flowchart) */}
+                    <section id="flowchart" className="bg-white py-16 px-6 border-y border-slate-200">
+                        <div className="max-w-5xl mx-auto">
+                            <div className="text-center mb-12">
+                                <h2 className="text-3xl font-bold text-slate-800 mb-4">系統運作流程圖</h2>
+                                <p className="text-slate-600">不只是「考會不會」，更是一個「邊評量、邊協助、邊診斷」的完整學習迴圈。</p>
+                            </div>
+
+                            <div className="flex flex-col md:flex-row items-center justify-center gap-4 relative">
+                                <div className="bg-slate-50 border-2 border-indigo-100 w-full md:w-64 p-6 rounded-2xl text-center shadow-sm relative z-10 hover:border-indigo-300 transition-colors">
+                                    <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <BookOpen className="w-7 h-7" />
+                                    </div>
+                                    <h4 className="font-bold text-lg mb-2">1. 首次測驗</h4>
+                                    <p className="text-sm text-slate-500">進行科學閱讀並作答<br/>(涵蓋四大診斷面向)</p>
+                                </div>
+
+                                <ArrowDown className="md:hidden text-indigo-300 w-8 h-8" />
+                                <ArrowRight className="hidden md:block text-indigo-300 w-10 h-10" />
+
+                                <div className="bg-orange-50 border-2 border-orange-200 w-full md:w-64 p-6 rounded-2xl text-center shadow-sm relative z-10 hover:border-orange-300 transition-colors">
+                                    <div className="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-sm">答錯時啟動</div>
+                                    <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <Lightbulb className="w-7 h-7" />
+                                    </div>
+                                    <h4 className="font-bold text-lg mb-2">2. 漸進提示</h4>
+                                    <p className="text-sm text-slate-500">依序提供三階段鷹架：<br/>題意 → 策略 → 概念</p>
+                                </div>
+
+                                <ArrowDown className="md:hidden text-orange-300 w-8 h-8" />
+                                <ArrowRight className="hidden md:block text-orange-300 w-10 h-10" />
+
+                                <div className="bg-emerald-50 border-2 border-emerald-200 w-full md:w-64 p-6 rounded-2xl text-center shadow-sm relative z-10 hover:border-emerald-300 transition-colors">
+                                    <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <RotateCcw className="w-7 h-7" />
+                                    </div>
+                                    <h4 className="font-bold text-lg mb-2">3. 再次作答</h4>
+                                    <p className="text-sm text-slate-500">學生獲得提示後<br/>重新嘗試解題</p>
+                                </div>
+
+                                <ArrowDown className="md:hidden text-emerald-300 w-8 h-8" />
+                                <ArrowRight className="hidden md:block text-emerald-300 w-10 h-10" />
+
+                                <div className="bg-blue-50 border-2 border-blue-200 w-full md:w-64 p-6 rounded-2xl text-center shadow-sm relative z-10 hover:border-blue-300 transition-colors">
+                                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <LineChart className="w-7 h-7" />
+                                    </div>
+                                    <h4 className="font-bold text-lg mb-2">4. 診斷回饋</h4>
+                                    <p className="text-sm text-slate-500">依提示次數判斷困難層次<br/>提供後續教學方向</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 三階段提示設計 */}
+                    <section className="py-16 px-6 max-w-5xl mx-auto">
+                        <div className="flex flex-col md:flex-row gap-12 items-center">
+                            <div className="md:w-1/2">
+                                <h2 className="text-3xl font-bold text-slate-800 mb-6">核心精華：三階段提示設計</h2>
+                                <p className="text-slate-600 mb-8 leading-relaxed">
+                                    DARCS 的提示<strong className="text-blue-600">不是直接告訴答案</strong>，而是逐步引導。透過學生在「哪一層提示」後能成功解題，教師可以精準判斷學生的困難點。
+                                </p>
+                                <div className="space-y-6">
+                                    <div className="flex gap-4 items-start">
+                                        <div className="w-10 h-10 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center font-bold shrink-0">1</div>
+                                        <div>
+                                            <h4 className="text-lg font-bold text-slate-800">重述題意 (輕度提示)</h4>
+                                            <p className="text-sm text-slate-600 mt-1">幫助重新理解問題。若此階段答對，可能只是看題不清或粗心。</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 items-start">
+                                        <div className="w-10 h-10 rounded-full bg-orange-200 text-orange-700 flex items-center justify-center font-bold shrink-0">2</div>
+                                        <div>
+                                            <h4 className="text-lg font-bold text-slate-800">提示文章段落與閱讀策略</h4>
+                                            <p className="text-sm text-slate-600 mt-1">引導回到文本找線索。若此階段答對，代表缺乏文本搜尋與閱讀策略。</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4 items-start">
+                                        <div className="w-10 h-10 rounded-full bg-red-200 text-red-700 flex items-center justify-center font-bold shrink-0">3</div>
+                                        <div>
+                                            <h4 className="text-lg font-bold text-slate-800">明示概念說明 (明確指導)</h4>
+                                            <p className="text-sm text-slate-600 mt-1">協助建立正確概念。若此階段才答對，表示基礎學科概念仍需補強。</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="md:w-1/2">
+                                <img 
+                                    src="https://images.unsplash.com/photo-1577896851231-70ef18881754?auto=format&fit=crop&w=800&q=80" 
+                                    alt="教師指導學生" 
+                                    className="rounded-2xl shadow-xl w-full"
+                                />
+                                <p className="text-center text-sm text-slate-400 mt-4">教師可依據系統回饋，進行精準的補救教學</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 實際教學案例 */}
+                    <section id="cases" className="bg-slate-900 text-slate-50 py-16 px-6">
+                        <div className="max-w-4xl mx-auto">
+                            <div className="text-center mb-10">
+                                <h2 className="text-3xl font-bold mb-4">應用於教學現場：實際案例展示</h2>
+                                <p className="text-slate-400">動態評量不只適用於科學閱讀，更可擴展至數學與國語文。</p>
+                            </div>
+
+                            <div className="flex flex-wrap justify-center gap-2 mb-8">
+                                {cases.map((c, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => setActiveCase(idx)}
+                                        className={`flex items-center gap-2 px-6 py-3 rounded-full font-medium transition-all ${
+                                            activeCase === idx 
+                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' 
+                                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                                        }`}
+                                    >
+                                        {c.icon}
+                                        {c.title}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="text-center mb-8 -mt-4 animate-pulse">
+                                <span className="text-sm text-slate-400 bg-slate-800/50 px-4 py-1.5 rounded-full border border-slate-700">
+                                    💡 提示：您也可以使用鍵盤的 ⬅️ ➡️ 方向鍵左右切換案例
+                                </span>
+                            </div>
+
+                            <div className="bg-slate-800 rounded-2xl p-6 md:p-10 shadow-2xl border border-slate-700">
+                                <div className="mb-8 pb-6 border-b border-slate-700">
+                                    <span className="text-blue-400 text-sm font-bold tracking-wider mb-2 block">文本主題</span>
+                                    <h3 className="text-2xl font-bold mb-4">{cases[activeCase].theme}</h3>
+                                    <div className="bg-slate-900 p-4 rounded-lg border-l-4 border-blue-500">
+                                        <span className="text-slate-400 text-sm block mb-1">題目：</span>
+                                        <p className="text-lg">{cases[activeCase].question}</p>
+                                    </div>
+                                </div>
+
+                                <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                    <Activity className="text-orange-400 w-5 h-5" />
+                                    學生答錯後的提示歷程：
+                                </h4>
+
+                                <div className="space-y-4">
+                                    {cases[activeCase].prompts.map((prompt, idx) => (
+                                        <div key={idx} className="flex flex-col md:flex-row gap-4 bg-slate-700/50 p-4 rounded-xl">
+                                            <div className="md:w-1/4 shrink-0">
+                                                <span className="inline-block px-3 py-1 bg-slate-900 rounded-md text-sm font-bold text-slate-300">
+                                                    {prompt.level}
+                                                </span>
+                                            </div>
+                                            <div className="md:w-2/4">
+                                                <p className="text-slate-200">「{prompt.text}」</p>
+                                            </div>
+                                            <div className="md:w-1/4 bg-slate-800/80 p-3 rounded-lg border border-slate-600/50">
+                                                <p className="text-xs text-blue-300 font-medium">💡 診斷分析：</p>
+                                                <p className="text-sm text-slate-400 mt-1">{prompt.analysis}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 頁尾 */}
+                    <footer className="bg-slate-100 py-8 text-center text-slate-500 border-t border-slate-200">
+                        <p className="text-sm">
+                            本網頁基於「惠君老師動態評量作業」內容設計 | 課程評量報告分析架構參考
+                        </p>
+                    </footer>
+                </div>
+            );
+        }
+
+        // --- 啟動 React 應用程式 ---
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
